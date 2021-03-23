@@ -146,17 +146,18 @@ def main():
     # Setup logging.
     logdir = os.path.join(cfg.experiment.logdir, cfg.experiment.id)
     os.makedirs(logdir, exist_ok=True)
-    writer = SummaryWriter(logdir)
     # Write out config parameters.
     with open(os.path.join(logdir, "config.yml"), "w") as f:
         f.write(cfg.dump())  # cfg, f, default_flow_style=False)
 
     # By default, start at iteration 0 (unless a checkpoint is specified).
-    start_iter = 0
 
     # Load an existing checkpoint, if a path is specified.
-    if os.path.exists(configargs.load_checkpoint):
-        checkpoint = torch.load(configargs.load_checkpoint, map_location=torch.device('cpu'))
+    if os.path.exists(os.path.abspath(configargs.load_checkpoint)):
+        device = torch.device('cuda:0')
+        #device = torch.device('cpu')
+
+        checkpoint = torch.load(configargs.load_checkpoint, map_location=device)
         model_coarse.load_state_dict(checkpoint["model_coarse_state_dict"])
         if checkpoint["model_fine_state_dict"]:
             model_fine.load_state_dict(checkpoint["model_fine_state_dict"])
@@ -164,12 +165,15 @@ def main():
 
         dim_xyz = 3 + 2 * 3 * cfg.models.coarse.num_encoding_fn_xyz
         dim_dir = 3 + 2 * 3 * cfg.models.coarse.num_encoding_fn_dir
-        dummy_input = torch.zeros((1, dim_dir + dim_xyz),dtype=torch.float)
+        dummy_input = torch.zeros((1, dim_dir + dim_xyz), dtype=torch.float).to(device)
 
-        out_folder, _ = ntpath.split(configargs.load_checkpoint)
+        out_folder, _ = ntpath.split(configargs.config)
         torch.onnx.export(model_coarse, dummy_input, os.path.join(out_folder, "coarse_model.onnx"),
                           verbose=False, input_names=["input"])
         torch.onnx.export(model_fine, dummy_input, os.path.join(out_folder, "fine_model.onnx"), input_names=["input"])
+
+    else:
+        print("Couldn't find the checkpoint file at {}".format(os.path.abspath(configargs.load_checkpoint)))
 
     print("Done!")
 
